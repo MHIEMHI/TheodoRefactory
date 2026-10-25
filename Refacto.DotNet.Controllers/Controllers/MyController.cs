@@ -26,11 +26,13 @@ namespace Refacto.DotNet.Controllers.Controllers
             Entities.Order? order = _ctx.Orders
                 .Include(o => o.Items)
                 .SingleOrDefault(o => o.Id == orderId);
-            Console.WriteLine(order);
-            List<long> ids = new() { orderId };
-            ICollection<Entities.Product>? products = order.Items;
 
-            foreach (Entities.Product p in products)
+            if (order is null)
+            {
+                return NotFound();
+            }
+
+            foreach (Entities.Product p in order.Items ?? new List<Entities.Product>())
             {
                 if (p.Type == "NORMAL")
                 {

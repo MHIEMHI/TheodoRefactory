@@ -95,6 +95,25 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             _notifications.Verify(service => service.SendOutOfStockNotification(It.IsAny<string>()), Times.Never);
         }
 
+        [Fact]
+        public void SeasonalProductWhoseLeadTimeReachesSeasonEndIsReportedOutOfStock()
+        {
+            Product product = AddProduct(new Product
+            {
+                LeadTime = 1,
+                Available = 8,
+                Name = "Peaches",
+                SeasonStartDate = DateTime.Today.AddDays(-1),
+                SeasonEndDate = DateTime.Today.AddDays(1)
+            });
+
+            _service.HandleSeasonalProduct(product);
+
+            Assert.Equal(0, ReadProduct(product.Id).Available);
+            _notifications.Verify(service => service.SendOutOfStockNotification("Peaches"), Times.Once);
+            _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+        }
+
         [Theory]
         [InlineData(0)]
         [InlineData(-3)]
@@ -353,9 +372,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         }
 
         [Fact]
-        public void ProcessOrderForMissingOrderThrowsNullReferenceException()
+        public void ProcessOrderForMissingOrderReturnsNotFound()
         {
-            Assert.Throws<NullReferenceException>(() => CreateController().ProcessOrder(-1));
+            ActionResult<Refacto.DotNet.Controllers.Dtos.Product.ProcessOrderResponse> result =
+                CreateController().ProcessOrder(-1);
+
+            Assert.IsType<NotFoundResult>(result.Result);
         }
 
         private Product AddProduct(Product product)
