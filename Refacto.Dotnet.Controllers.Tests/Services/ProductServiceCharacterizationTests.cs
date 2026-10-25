@@ -38,7 +38,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         {
             Product product = AddProduct(new Product { LeadTime = 15, Available = 0, Type = "NORMAL", Name = "RJ45 Cable" });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(15, product.LeadTime);
             _notifications.Verify(service => service.SendDelayNotification(15, "RJ45 Cable"), Times.Once);
@@ -102,7 +102,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Watermelon"), Times.Once);
@@ -122,7 +122,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 SeasonEndDate = _now.AddDays(60)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(8, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Grapes"), Times.Once);
@@ -142,7 +142,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(8, product.Available);
             _notifications.Verify(service => service.SendDelayNotification(2, "Peaches"), Times.Once);
@@ -162,7 +162,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 SeasonEndDate = _now.Date.AddDays(1).AddHours(23).AddMinutes(59)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Peaches"), Times.Once);
@@ -184,7 +184,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             _notifications.Verify(service => service.SendDelayNotification(leadTime, "Peaches"), Times.Once);
         }
@@ -200,7 +200,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 ExpiryDate = _now.AddDays(2)
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(2, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
@@ -217,7 +217,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 ExpiryDate = _now.Date
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
@@ -235,7 +235,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 ExpiryDate = expiryDate
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", expiryDate), Times.Once);
@@ -253,7 +253,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 ExpiryDate = expiryDate
             });
 
-            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            ProcessProduct(product);
 
             Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Cheese", expiryDate), Times.Once);
@@ -264,7 +264,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         {
             Product product = AddProduct(new Product { Available = 0, Type = "EXPIRABLE", Name = "Unknown expiry" });
 
-            Assert.Throws<InvalidOperationException>(() => _service.ProcessProduct(product, DateOnly.FromDateTime(_now)));
+            Assert.Throws<InvalidOperationException>(() => ProcessProduct(product));
 
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
         }
@@ -274,7 +274,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         {
             Product product = AddProduct(new Product { Available = 2, Type = "EXPIRABLE", Name = "Unknown expiry" });
 
-            Assert.Throws<InvalidOperationException>(() => _service.ProcessProduct(product, DateOnly.FromDateTime(_now)));
+            Assert.Throws<InvalidOperationException>(() => ProcessProduct(product));
 
             Assert.Equal(2, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
@@ -482,19 +482,45 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
         private OrdersController CreateController()
         {
+            EfOrderRepository repository = new(_context);
             IOrderProcessingService orderProcessingService =
-                new OrderProcessingService(new EfOrderRepository(_context), _service, _dateTimeProvider.Object);
-            return new OrdersController(orderProcessingService);
+                new OrderProcessingService(repository, _service, _dateTimeProvider.Object, _notifications.Object);
+            return new OrdersController(orderProcessingService, repository);
         }
 
         private ProductService CreateProductService()
         {
             return new ProductService(new IProductTypeHandler[]
             {
-                new NormalProductHandler(_notifications.Object),
-                new SeasonalProductHandler(_notifications.Object),
-                new ExpirableProductHandler(_notifications.Object)
+                new NormalProductHandler(),
+                new SeasonalProductHandler(),
+                new ExpirableProductHandler()
             });
+        }
+
+        private void ProcessProduct(Product product)
+        {
+            ProductNotification? notification = _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
+            _ = _context.SaveChanges();
+            if (notification is null)
+            {
+                return;
+            }
+
+            switch (notification.Type)
+            {
+                case ProductNotificationType.Delay:
+                    _notifications.Object.SendDelayNotification(notification.LeadTime!.Value, notification.ProductName!);
+                    break;
+                case ProductNotificationType.OutOfStock:
+                    _notifications.Object.SendOutOfStockNotification(notification.ProductName!);
+                    break;
+                case ProductNotificationType.Expired:
+                    _notifications.Object.SendExpirationNotification(
+                        notification.ProductName!,
+                        notification.ExpiryDate!.Value);
+                    break;
+            }
         }
     }
 }

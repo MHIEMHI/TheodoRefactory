@@ -7,6 +7,6 @@ namespace Refacto.DotNet.Application.Contracts
     {
         ProductType ProductType { get; }
 
-        void Handle(Product product, DateOnly currentDate);
+        ProductNotification? Handle(Product product, DateOnly currentDate);
     }
 }

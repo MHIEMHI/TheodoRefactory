@@ -6,16 +6,9 @@ namespace Refacto.DotNet.Application.Services.ProductHandlers
 {
     public sealed class SeasonalProductHandler : IProductTypeHandler
     {
-        private readonly INotificationService _notifications;
-
-        public SeasonalProductHandler(INotificationService notifications)
-        {
-            _notifications = notifications;
-        }
-
         public ProductType ProductType => ProductType.Seasonal;
 
-        public void Handle(Product product, DateOnly currentDate)
+        public ProductNotification? Handle(Product product, DateOnly currentDate)
         {
             DateOnly? seasonStartDate = ToDateOnly(product.SeasonStartDate);
             DateOnly? seasonEndDate = ToDateOnly(product.SeasonEndDate);
@@ -27,21 +20,20 @@ namespace Refacto.DotNet.Application.Services.ProductHandlers
                 && product.Available > 0)
             {
                 product.Available -= 1;
+                return null;
             }
             else if (seasonEndDate.HasValue
                 && currentDate.AddDays(product.LeadTime) >= seasonEndDate.Value)
             {
-                _notifications.SendOutOfStockNotification(product.Name);
                 product.Available = 0;
+                return new ProductNotification(ProductNotificationType.OutOfStock, product.Name);
             }
             else if (seasonStartDate.HasValue && seasonStartDate.Value > currentDate)
             {
-                _notifications.SendOutOfStockNotification(product.Name);
+                return new ProductNotification(ProductNotificationType.OutOfStock, product.Name);
             }
-            else
-            {
-                _notifications.SendDelayNotification(product.LeadTime, product.Name);
-            }
+
+            return new ProductNotification(ProductNotificationType.Delay, product.Name, product.LeadTime);
         }
 
         private static DateOnly? ToDateOnly(DateTime? value)

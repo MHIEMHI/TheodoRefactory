@@ -13,11 +13,11 @@ namespace Refacto.DotNet.Application.Services
             _handlers = handlers.ToDictionary(handler => handler.ProductType);
         }
 
-        public void ProcessProduct(Product product, DateOnly currentDate)
+        public ProductNotification? ProcessProduct(Product product, DateOnly currentDate)
         {
             if (!ProductTypeParser.TryParse(product.Type, out ProductType productType))
             {
-                return;
+                return null;
             }
 
             if (!_handlers.TryGetValue(productType, out IProductTypeHandler? handler))
@@ -25,7 +25,7 @@ namespace Refacto.DotNet.Application.Services
                 throw new InvalidOperationException($"No product handler is registered for '{productType}'.");
             }
 
-            handler.Handle(product, currentDate);
+            return handler.Handle(product, currentDate);
         }
     }
 }

@@ -6,25 +6,19 @@ namespace Refacto.DotNet.Application.Services.ProductHandlers
 {
     public sealed class NormalProductHandler : IProductTypeHandler
     {
-        private readonly INotificationService _notifications;
-
-        public NormalProductHandler(INotificationService notifications)
-        {
-            _notifications = notifications;
-        }
-
         public ProductType ProductType => ProductType.Normal;
 
-        public void Handle(Product product, DateOnly currentDate)
+        public ProductNotification? Handle(Product product, DateOnly currentDate)
         {
             if (product.Available > 0)
             {
                 product.Available -= 1;
+                return null;
             }
-            else if (product.LeadTime > 0)
-            {
-                _notifications.SendDelayNotification(product.LeadTime, product.Name);
-            }
+
+            return product.LeadTime > 0
+                ? new ProductNotification(ProductNotificationType.Delay, product.Name, product.LeadTime)
+                : null;
         }
     }
 }
