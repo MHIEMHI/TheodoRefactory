@@ -118,6 +118,16 @@ namespace Refacto.Dotnet.Controllers.Tests.Controllers
         }
 
         [Fact]
+        public async Task ProcessOrderWithNonNumericIdReturnsBadRequest()
+        {
+            HttpClient client = _factory.CreateClient();
+
+            HttpResponseMessage response = await client.PostAsync("/orders/not-a-number/processOrder", null);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Fact]
         public async Task ProcessOrderTreatsSeasonEndAndExpiryAsDateOnlyBoundaries()
         {
             HttpClient client = _factory.CreateClient();

@@ -21,16 +21,20 @@ namespace Refacto.DotNet.Controllers.Controllers
         }
 
         [HttpPost("{orderId}/processOrder")]
-        [ProducesResponseType(200)]
-        public ActionResult<ProcessOrderResponse> ProcessOrder(long orderId)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<ProcessOrderResponse>> ProcessOrder(
+            long orderId,
+            CancellationToken cancellationToken)
         {
-            Order? order = _orders.GetWithProducts(orderId);
+            Order? order = await _orders.GetWithProductsAsync(orderId, cancellationToken);
             if (order is null)
             {
                 return NotFound();
             }
 
-            _orderProcessingService.ProcessOrder(order);
+            await _orderProcessingService.ProcessOrderAsync(order, cancellationToken);
             return new ProcessOrderResponse(order.Id);
         }
     }

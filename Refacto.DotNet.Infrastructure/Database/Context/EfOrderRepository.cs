@@ -13,16 +13,16 @@ namespace Refacto.DotNet.Infrastructure.Persistence
             _context = context;
         }
 
-        public Order? GetWithProducts(long orderId)
+        public Task<Order?> GetWithProductsAsync(long orderId, CancellationToken cancellationToken)
         {
             return _context.Orders
                 .Include(order => order.Items)
-                .SingleOrDefault(order => order.Id == orderId);
+                .SingleOrDefaultAsync(order => order.Id == orderId, cancellationToken);
         }
 
-        public void SaveChanges()
+        public async Task SaveChangesAsync(CancellationToken cancellationToken)
         {
-            _ = _context.SaveChanges();
+            _ = await _context.SaveChangesAsync(cancellationToken);
         }
     }
 }

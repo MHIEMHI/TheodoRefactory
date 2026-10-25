@@ -22,46 +22,42 @@ namespace Refacto.DotNet.Application.Services
             _notifications = notifications;
         }
 
-        public void ProcessOrder(Order order)
+        public async Task ProcessOrderAsync(Order order, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(order);
+            cancellationToken.ThrowIfCancellationRequested();
+
             DateOnly currentDate = DateOnly.FromDateTime(_dateTimeProvider.Now);
             List<ProductNotification> notifications = new();
-            foreach (Product product in order.Items ?? new List<Product>())
+            foreach (Product product in order.Items ?? Array.Empty<Product>())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 ProductNotification? notification = _productRules.ProcessProduct(product, currentDate);
                 if (notification is not null)
                 {
+                    ValidateNotification(notification);
                     notifications.Add(notification);
                 }
             }
 
-            _orders.SaveChanges();
+            cancellationToken.ThrowIfCancellationRequested();
+            await _orders.SaveChangesAsync(cancellationToken);
             foreach (ProductNotification notification in notifications)
             {
                 switch (notification.Type)
                 {
                     case ProductNotificationType.Delay:
-                        if (!notification.LeadTime.HasValue)
-                        {
-                            throw new InvalidOperationException("A delay notification must include a lead time.");
-                        }
-
                         _notifications.SendDelayNotification(
-                            notification.LeadTime.Value,
+                            notification.LeadTime!.Value,
                             GetProductName(notification));
                         break;
                     case ProductNotificationType.OutOfStock:
                         _notifications.SendOutOfStockNotification(GetProductName(notification));
                         break;
                     case ProductNotificationType.Expired:
-                        if (!notification.ExpiryDate.HasValue)
-                        {
-                            throw new InvalidOperationException("An expiration notification must include an expiry date.");
-                        }
-
                         _notifications.SendExpirationNotification(
                             GetProductName(notification),
-                            notification.ExpiryDate.Value);
+                            notification.ExpiryDate!.Value);
                         break;
                     default:
                         throw new InvalidOperationException(
@@ -74,6 +70,28 @@ namespace Refacto.DotNet.Application.Services
         {
             return notification.ProductName
                 ?? throw new InvalidOperationException("A product notification must include a product name.");
+        }
+
+        private static void ValidateNotification(ProductNotification notification)
+        {
+            _ = GetProductName(notification);
+            if (notification.Type == ProductNotificationType.Delay && !notification.LeadTime.HasValue)
+            {
+                throw new InvalidOperationException("A delay notification must include a lead time.");
+            }
+
+            if (notification.Type == ProductNotificationType.Expired && !notification.ExpiryDate.HasValue)
+            {
+                throw new InvalidOperationException("An expiration notification must include an expiry date.");
+            }
+
+            if (notification.Type is not ProductNotificationType.Delay
+                and not ProductNotificationType.OutOfStock
+                and not ProductNotificationType.Expired)
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported notification type '{notification.Type}'.");
+            }
         }
     }
 }

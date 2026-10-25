@@ -4,8 +4,8 @@ namespace Refacto.DotNet.Application.Contracts
 {
     public interface IOrderRepository
     {
-        Order? GetWithProducts(long orderId);
+        Task<Order?> GetWithProductsAsync(long orderId, CancellationToken cancellationToken);
 
-        void SaveChanges();
+        Task SaveChangesAsync(CancellationToken cancellationToken);
     }
 }

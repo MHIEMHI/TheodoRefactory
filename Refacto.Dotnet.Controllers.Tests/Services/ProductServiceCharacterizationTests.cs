@@ -281,13 +281,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         }
 
         [Fact]
-        public void ProcessOrderDecrementsAvailableProductAndReturnsOrderId()
+        public async Task ProcessOrderDecrementsAvailableProductAndReturnsOrderId()
         {
             Product product = new() { Available = 2, Type = "NORMAL", Name = "USB Cable" };
             Order order = AddOrder(product);
 
             ActionResult<Refacto.DotNet.Controllers.Dtos.Product.ProcessOrderResponse> result =
-                CreateController().ProcessOrder(order.Id);
+                await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(order.Id, result.Value!.id);
             Assert.Equal(1, ReadProduct(product.Id).Available);
@@ -295,41 +295,41 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         }
 
         [Fact]
-        public void ProcessOrderNotifiesForUnavailableNormalProductOnlyWhenLeadTimeIsPositive()
+        public async Task ProcessOrderNotifiesForUnavailableNormalProductOnlyWhenLeadTimeIsPositive()
         {
             Product product = new() { Available = 0, LeadTime = 12, Type = "NORMAL", Name = "USB Dongle" };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             _notifications.Verify(service => service.SendDelayNotification(12, "USB Dongle"), Times.Once);
             Assert.Equal(0, ReadProduct(product.Id).Available);
         }
 
         [Fact]
-        public void ProcessOrderIgnoresUnavailableNormalProductWithoutPositiveLeadTime()
+        public async Task ProcessOrderIgnoresUnavailableNormalProductWithoutPositiveLeadTime()
         {
             Product product = new() { Available = 0, LeadTime = 0, Type = "NORMAL", Name = "USB Dongle" };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
-        public void ProcessOrderIgnoresUnavailableNormalProductWithNegativeLeadTime()
+        public async Task ProcessOrderIgnoresUnavailableNormalProductWithNegativeLeadTime()
         {
             Product product = new() { Available = 0, LeadTime = -1, Type = "NORMAL", Name = "USB Dongle" };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
-        public void ProcessOrderOnSeasonStartDateFallsBackToZeroDayDelay()
+        public async Task ProcessOrderOnSeasonStartDateFallsBackToZeroDayDelay()
         {
             Product product = new()
             {
@@ -342,14 +342,14 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(2, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendDelayNotification(0, "Watermelon"), Times.Once);
         }
 
         [Fact]
-        public void ProcessOrderOnSeasonEndDateReportsOutOfStockAndSetsAvailabilityToZero()
+        public async Task ProcessOrderOnSeasonEndDateReportsOutOfStockAndSetsAvailabilityToZero()
         {
             Product product = new()
             {
@@ -362,14 +362,14 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Watermelon"), Times.Once);
         }
 
         [Fact]
-        public void ProcessOrderOnExpiryDateReportsExpiredAndSetsAvailabilityToZero()
+        public async Task ProcessOrderOnExpiryDateReportsExpiredAndSetsAvailabilityToZero()
         {
             Product product = new()
             {
@@ -380,14 +380,14 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
         }
 
         [Fact]
-        public void ProcessOrderAppliesCurrentSeasonAndExpiryRules()
+        public async Task ProcessOrderAppliesCurrentSeasonAndExpiryRules()
         {
             Product inSeason = new()
             {
@@ -423,7 +423,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             Order order = AddOrder(inSeason, futureSeason, unexpired, expired);
 
             ActionResult<Refacto.DotNet.Controllers.Dtos.Product.ProcessOrderResponse> result =
-                CreateController().ProcessOrder(order.Id);
+                await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(order.Id, result.Value!.id);
             Assert.Equal(1, ReadProduct(inSeason.Id).Available);
@@ -435,12 +435,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         }
 
         [Fact]
-        public void ProcessOrderWithUnknownProductTypeLeavesAvailabilityUnchanged()
+        public async Task ProcessOrderWithUnknownProductTypeLeavesAvailabilityUnchanged()
         {
             Product product = new() { Available = 5, Type = "OTHER", Name = "Unclassified" };
             Order order = AddOrder(product);
 
-            _ = CreateController().ProcessOrder(order.Id);
+            _ = await CreateController().ProcessOrder(order.Id, CancellationToken.None);
 
             Assert.Equal(5, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
@@ -449,10 +449,10 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         }
 
         [Fact]
-        public void ProcessOrderForMissingOrderReturnsNotFound()
+        public async Task ProcessOrderForMissingOrderReturnsNotFound()
         {
             ActionResult<Refacto.DotNet.Controllers.Dtos.Product.ProcessOrderResponse> result =
-                CreateController().ProcessOrder(-1);
+                await CreateController().ProcessOrder(-1, CancellationToken.None);
 
             Assert.IsType<NotFoundResult>(result.Result);
         }

@@ -2,6 +2,6 @@ namespace Refacto.DotNet.Application.Contracts
 {
     public interface IOrderProcessingService
     {
-        void ProcessOrder(Domain.Entities.Order order);
+        Task ProcessOrderAsync(Domain.Entities.Order order, CancellationToken cancellationToken);
     }
 }
