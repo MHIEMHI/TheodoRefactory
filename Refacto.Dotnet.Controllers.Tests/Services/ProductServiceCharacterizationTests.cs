@@ -27,19 +27,38 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             _notifications = new Mock<INotificationService>();
             _dateTimeProvider = new Mock<IDateTimeProvider>();
             _dateTimeProvider.SetupGet(provider => provider.Now).Returns(_now);
-            _service = new ProductService(_notifications.Object, _context, _dateTimeProvider.Object);
+            _service = new ProductService(_notifications.Object, _context);
         }
 
 
         [Fact]
         public void NotifyDelaySavesTheLeadTimeAndSendsDelayNotification()
         {
-            Product product = AddProduct(new Product { LeadTime = 15, Available = 0, Name = "RJ45 Cable" });
+            Product product = AddProduct(new Product { LeadTime = 15, Available = 0, Type = "NORMAL", Name = "RJ45 Cable" });
 
-            _service.NotifyDelay(15, product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(15, ReadProduct(product.Id).LeadTime);
             _notifications.Verify(service => service.SendDelayNotification(15, "RJ45 Cable"), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("NORMAL", ProductType.Normal)]
+        [InlineData("SEASONAL", ProductType.Seasonal)]
+        [InlineData("EXPIRABLE", ProductType.Expirable)]
+        public void ProductTypeParserRecognizesSupportedValues(string value, ProductType expected)
+        {
+            Assert.True(ProductTypeParser.TryParse(value, out ProductType actual));
+            Assert.Equal(expected, actual);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("OTHER")]
+        [InlineData("normal")]
+        public void ProductTypeParserRejectsUnsupportedValues(string? value)
+        {
+            Assert.False(ProductTypeParser.TryParse(value, out _));
         }
 
         [Fact]
@@ -49,12 +68,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 LeadTime = 20,
                 Available = 8,
+                Type = "SEASONAL",
                 Name = "Watermelon",
-                SeasonStartDate = _now.AddDays(-1),
+                SeasonStartDate = _now.Date,
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.HandleSeasonalProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Watermelon"), Times.Once);
@@ -68,12 +88,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 LeadTime = 2,
                 Available = 8,
+                Type = "SEASONAL",
                 Name = "Grapes",
                 SeasonStartDate = _now.AddDays(30),
                 SeasonEndDate = _now.AddDays(60)
             });
 
-            _service.HandleSeasonalProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(8, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Grapes"), Times.Once);
@@ -87,12 +108,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 LeadTime = 2,
                 Available = 8,
+                Type = "SEASONAL",
                 Name = "Peaches",
-                SeasonStartDate = _now.AddDays(-1),
+                SeasonStartDate = _now.Date,
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.HandleSeasonalProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(8, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendDelayNotification(2, "Peaches"), Times.Once);
@@ -106,12 +128,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 LeadTime = 1,
                 Available = 8,
+                Type = "SEASONAL",
                 Name = "Peaches",
-                SeasonStartDate = _now.Date.AddDays(-1),
+                SeasonStartDate = _now.Date,
                 SeasonEndDate = _now.Date.AddDays(1).AddHours(23).AddMinutes(59)
             });
 
-            _service.HandleSeasonalProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Peaches"), Times.Once);
@@ -127,12 +150,13 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 LeadTime = leadTime,
                 Available = 8,
+                Type = "SEASONAL",
                 Name = "Peaches",
-                SeasonStartDate = _now.AddDays(-1),
+                SeasonStartDate = _now.Date,
                 SeasonEndDate = _now.AddDays(10)
             });
 
-            _service.HandleSeasonalProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             _notifications.Verify(service => service.SendDelayNotification(leadTime, "Peaches"), Times.Once);
         }
@@ -143,11 +167,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             Product product = AddProduct(new Product
             {
                 Available = 3,
+                Type = "EXPIRABLE",
                 Name = "Butter",
                 ExpiryDate = _now.AddDays(2)
             });
 
-            _service.HandleExpiredProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(2, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
@@ -159,11 +184,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             Product product = AddProduct(new Product
             {
                 Available = 3,
+                Type = "EXPIRABLE",
                 Name = "Milk",
                 ExpiryDate = _now.Date
             });
 
-            _service.HandleExpiredProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
@@ -176,11 +202,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             Product product = AddProduct(new Product
             {
                 Available = 3,
+                Type = "EXPIRABLE",
                 Name = "Milk",
                 ExpiryDate = expiryDate
             });
 
-            _service.HandleExpiredProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", expiryDate), Times.Once);
@@ -193,11 +220,12 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             Product product = AddProduct(new Product
             {
                 Available = 0,
+                Type = "EXPIRABLE",
                 Name = "Cheese",
                 ExpiryDate = expiryDate
             });
 
-            _service.HandleExpiredProduct(product);
+            _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification("Cheese", expiryDate), Times.Once);
@@ -206,9 +234,9 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         [Fact]
         public void OutOfStockProductWithoutExpiryDateThrowsBeforeSendingNotification()
         {
-            Product product = AddProduct(new Product { Available = 0, Name = "Unknown expiry" });
+            Product product = AddProduct(new Product { Available = 0, Type = "EXPIRABLE", Name = "Unknown expiry" });
 
-            Assert.Throws<InvalidOperationException>(() => _service.HandleExpiredProduct(product));
+            Assert.Throws<InvalidOperationException>(() => _service.ProcessProduct(product, DateOnly.FromDateTime(_now)));
 
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
         }
@@ -216,9 +244,9 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         [Fact]
         public void InStockProductWithoutExpiryDateIsZeroedAndThrowsBeforeSendingNotification()
         {
-            Product product = AddProduct(new Product { Available = 2, Name = "Unknown expiry" });
+            Product product = AddProduct(new Product { Available = 2, Type = "EXPIRABLE", Name = "Unknown expiry" });
 
-            Assert.Throws<InvalidOperationException>(() => _service.HandleExpiredProduct(product));
+            Assert.Throws<InvalidOperationException>(() => _service.ProcessProduct(product, DateOnly.FromDateTime(_now)));
 
             Assert.Equal(2, ReadProduct(product.Id).Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
@@ -426,7 +454,9 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
         private OrdersController CreateController()
         {
-            return new OrdersController(_service, _context, _dateTimeProvider.Object);
+            IOrderProcessingService orderProcessingService =
+                new OrderProcessingService(_context, _service, _dateTimeProvider.Object);
+            return new OrdersController(orderProcessingService);
         }
     }
 }

@@ -13,7 +13,6 @@ namespace Refacto.DotNet.Controllers.Tests.Services
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<AppDbContext> _mockDbContext;
         private readonly Mock<DbSet<Product>> _mockDbSet;
-        private readonly Mock<IDateTimeProvider> _mockDateTimeProvider;
         private readonly ProductService _productService;
 
         public MyUnitTests()
@@ -21,12 +20,8 @@ namespace Refacto.DotNet.Controllers.Tests.Services
             _mockNotificationService = new Mock<INotificationService>();
             _mockDbContext = new Mock<AppDbContext>();
             _mockDbSet = new Mock<DbSet<Product>>();
-            _mockDateTimeProvider = new Mock<IDateTimeProvider>();
             _ = _mockDbContext.Setup(x => x.Products).ReturnsDbSet(Array.Empty<Product>());
-            _productService = new ProductService(
-                _mockNotificationService.Object,
-                _mockDbContext.Object,
-                _mockDateTimeProvider.Object);
+            _productService = new ProductService(_mockNotificationService.Object, _mockDbContext.Object);
         }
 
         [Fact]
@@ -42,7 +37,7 @@ namespace Refacto.DotNet.Controllers.Tests.Services
             };
 
             // WHEN
-            _productService.NotifyDelay(product.LeadTime, product);
+            _productService.ProcessProduct(product, new DateOnly(2025, 5, 10));
 
             // THEN
             Assert.Equal(0, product.Available);

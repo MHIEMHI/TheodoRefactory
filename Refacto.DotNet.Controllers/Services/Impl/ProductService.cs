@@ -1,63 +1,112 @@
-﻿using Refacto.DotNet.Controllers.Database.Context;
+using Refacto.DotNet.Controllers.Database.Context;
 using Refacto.DotNet.Controllers.Entities;
 using Refacto.DotNet.Controllers.Services;
 
 namespace Refacto.DotNet.Controllers.Services.Impl
 {
-    public class ProductService
+    public sealed class ProductService : IProductRulesService
     {
-        private readonly INotificationService _ns;
-        private readonly AppDbContext _ctx;
-        private readonly IDateTimeProvider _dateTimeProvider;
+        private readonly INotificationService _notifications;
+        private readonly AppDbContext _context;
 
-        public ProductService(INotificationService ns, AppDbContext ctx, IDateTimeProvider dateTimeProvider)
+        public ProductService(INotificationService notifications, AppDbContext context)
         {
-            _ns = ns;
-            _ctx = ctx;
-            _dateTimeProvider = dateTimeProvider;
+            _notifications = notifications;
+            _context = context;
         }
 
-        public void NotifyDelay(int leadTime, Product p)
+        public void ProcessProduct(Product product, DateOnly currentDate)
         {
-            p.LeadTime = leadTime;
-            _ = _ctx.SaveChanges();
-            _ns.SendDelayNotification(leadTime, p.Name);
-        }
-
-        public void HandleSeasonalProduct(Product p)
-        {
-            DateTime currentDate = _dateTimeProvider.Now.Date;
-            if (p.SeasonEndDate.HasValue && currentDate.AddDays(p.LeadTime) >= p.SeasonEndDate.Value.Date)
+            if (!ProductTypeParser.TryParse(product.Type, out ProductType productType))
             {
-                _ns.SendOutOfStockNotification(p.Name);
-                p.Available = 0;
-                _ = _ctx.SaveChanges();
+                return;
             }
-            else if (p.SeasonStartDate.HasValue && p.SeasonStartDate.Value.Date > currentDate)
+
+            switch (productType)
             {
-                _ns.SendOutOfStockNotification(p.Name);
-                _ = _ctx.SaveChanges();
+                case ProductType.Normal:
+                    ProcessNormalProduct(product);
+                    break;
+                case ProductType.Seasonal:
+                    ProcessSeasonalProduct(product, currentDate);
+                    break;
+                case ProductType.Expirable:
+                    ProcessExpirableProduct(product, currentDate);
+                    break;
+            }
+        }
+
+        private void ProcessNormalProduct(Product product)
+        {
+            if (product.Available > 0)
+            {
+                product.Available -= 1;
+                _ = _context.SaveChanges();
+            }
+            else if (product.LeadTime > 0)
+            {
+                NotifyDelay(product.LeadTime, product);
+            }
+        }
+
+        private void ProcessSeasonalProduct(Product product, DateOnly currentDate)
+        {
+            DateOnly? seasonStartDate = ToDateOnly(product.SeasonStartDate);
+            DateOnly? seasonEndDate = ToDateOnly(product.SeasonEndDate);
+
+            if (seasonStartDate.HasValue
+                && seasonEndDate.HasValue
+                && currentDate > seasonStartDate.Value
+                && currentDate < seasonEndDate.Value
+                && product.Available > 0)
+            {
+                product.Available -= 1;
+                _ = _context.SaveChanges();
+            }
+            else if (seasonEndDate.HasValue
+                && currentDate.AddDays(product.LeadTime) >= seasonEndDate.Value)
+            {
+                _notifications.SendOutOfStockNotification(product.Name);
+                product.Available = 0;
+                _ = _context.SaveChanges();
+            }
+            else if (seasonStartDate.HasValue && seasonStartDate.Value > currentDate)
+            {
+                _notifications.SendOutOfStockNotification(product.Name);
+                _ = _context.SaveChanges();
             }
             else
             {
-                NotifyDelay(p.LeadTime, p);
+                NotifyDelay(product.LeadTime, product);
             }
         }
 
-        public void HandleExpiredProduct(Product p)
+        private void ProcessExpirableProduct(Product product, DateOnly currentDate)
         {
-            DateTime currentDate = _dateTimeProvider.Now.Date;
-            if (p.Available > 0 && p.ExpiryDate.HasValue && p.ExpiryDate.Value.Date > currentDate)
+            DateOnly? expiryDate = ToDateOnly(product.ExpiryDate);
+            if (product.Available > 0 && expiryDate.HasValue && expiryDate.Value > currentDate)
             {
-                p.Available -= 1;
-                _ = _ctx.SaveChanges();
+                product.Available -= 1;
+                _ = _context.SaveChanges();
             }
             else
             {
-                _ns.SendExpirationNotification(p.Name, (DateTime)p.ExpiryDate);
-                p.Available = 0;
-                _ = _ctx.SaveChanges();
+                _notifications.SendExpirationNotification(product.Name, product.ExpiryDate!.Value);
+                product.Available = 0;
+                _ = _context.SaveChanges();
             }
+        }
+
+        private void NotifyDelay(int leadTime, Product product)
+        {
+            product.LeadTime = leadTime;
+            _ = _context.SaveChanges();
+            _notifications.SendDelayNotification(leadTime, product.Name);
+        }
+
+        private static DateOnly? ToDateOnly(DateTime? value)
+        {
+            return value.HasValue ? DateOnly.FromDateTime(value.Value) : null;
         }
     }
 }
