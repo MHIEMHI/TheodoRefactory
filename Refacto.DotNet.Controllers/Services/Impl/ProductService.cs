@@ -1,5 +1,6 @@
 ﻿using Refacto.DotNet.Controllers.Database.Context;
 using Refacto.DotNet.Controllers.Entities;
+using Refacto.DotNet.Controllers.Services;
 
 namespace Refacto.DotNet.Controllers.Services.Impl
 {
@@ -7,11 +8,13 @@ namespace Refacto.DotNet.Controllers.Services.Impl
     {
         private readonly INotificationService _ns;
         private readonly AppDbContext _ctx;
+        private readonly IDateTimeProvider _dateTimeProvider;
 
-        public ProductService(INotificationService ns, AppDbContext ctx)
+        public ProductService(INotificationService ns, AppDbContext ctx, IDateTimeProvider dateTimeProvider)
         {
             _ns = ns;
             _ctx = ctx;
+            _dateTimeProvider = dateTimeProvider;
         }
 
         public void NotifyDelay(int leadTime, Product p)
@@ -23,13 +26,14 @@ namespace Refacto.DotNet.Controllers.Services.Impl
 
         public void HandleSeasonalProduct(Product p)
         {
-            if (DateTime.Now.AddDays(p.LeadTime) > p.SeasonEndDate)
+            DateTime currentDate = _dateTimeProvider.Now.Date;
+            if (p.SeasonEndDate.HasValue && currentDate.AddDays(p.LeadTime) >= p.SeasonEndDate.Value.Date)
             {
                 _ns.SendOutOfStockNotification(p.Name);
                 p.Available = 0;
                 _ = _ctx.SaveChanges();
             }
-            else if (p.SeasonStartDate > DateTime.Now)
+            else if (p.SeasonStartDate.HasValue && p.SeasonStartDate.Value.Date > currentDate)
             {
                 _ns.SendOutOfStockNotification(p.Name);
                 _ = _ctx.SaveChanges();
@@ -42,7 +46,8 @@ namespace Refacto.DotNet.Controllers.Services.Impl
 
         public void HandleExpiredProduct(Product p)
         {
-            if (p.Available > 0 && p.ExpiryDate > DateTime.Now)
+            DateTime currentDate = _dateTimeProvider.Now.Date;
+            if (p.Available > 0 && p.ExpiryDate.HasValue && p.ExpiryDate.Value.Date > currentDate)
             {
                 p.Available -= 1;
                 _ = _ctx.SaveChanges();

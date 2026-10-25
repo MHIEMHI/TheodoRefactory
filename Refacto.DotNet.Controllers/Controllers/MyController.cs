@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Refacto.DotNet.Controllers.Database.Context;
 using Refacto.DotNet.Controllers.Dtos.Product;
+using Refacto.DotNet.Controllers.Services;
 using Refacto.DotNet.Controllers.Services.Impl;
 
 namespace Refacto.DotNet.Controllers.Controllers
@@ -12,11 +13,13 @@ namespace Refacto.DotNet.Controllers.Controllers
     {
         private readonly ProductService _ps;
         private readonly AppDbContext _ctx;
+        private readonly IDateTimeProvider _dateTimeProvider;
 
-        public OrdersController(ProductService ps, AppDbContext ctx)
+        public OrdersController(ProductService ps, AppDbContext ctx, IDateTimeProvider dateTimeProvider)
         {
             _ps = ps;
             _ctx = ctx;
+            _dateTimeProvider = dateTimeProvider;
         }
 
         [HttpPost("{orderId}/processOrder")]
@@ -32,6 +35,7 @@ namespace Refacto.DotNet.Controllers.Controllers
                 return NotFound();
             }
 
+            DateTime currentDate = _dateTimeProvider.Now.Date;
             foreach (Entities.Product p in order.Items ?? new List<Entities.Product>())
             {
                 if (p.Type == "NORMAL")
@@ -54,7 +58,11 @@ namespace Refacto.DotNet.Controllers.Controllers
                 }
                 else if (p.Type == "SEASONAL")
                 {
-                    if (DateTime.Now.Date > p.SeasonStartDate && DateTime.Now.Date < p.SeasonEndDate && p.Available > 0)
+                    if (p.SeasonStartDate.HasValue
+                        && p.SeasonEndDate.HasValue
+                        && currentDate > p.SeasonStartDate.Value.Date
+                        && currentDate < p.SeasonEndDate.Value.Date
+                        && p.Available > 0)
                     {
                         p.Available -= 1;
                         _ = _ctx.SaveChanges();
@@ -66,7 +74,7 @@ namespace Refacto.DotNet.Controllers.Controllers
                 }
                 else if (p.Type == "EXPIRABLE")
                 {
-                    if (p.Available > 0 && p.ExpiryDate > DateTime.Now.Date)
+                    if (p.Available > 0 && p.ExpiryDate.HasValue && p.ExpiryDate.Value.Date > currentDate)
                     {
                         p.Available -= 1;
                         _ = _ctx.SaveChanges();

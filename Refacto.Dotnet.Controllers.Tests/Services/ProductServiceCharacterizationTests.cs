@@ -14,7 +14,9 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
         private AppDbContext _context = null!;
         private Mock<INotificationService> _notifications = null!;
+        private Mock<IDateTimeProvider> _dateTimeProvider = null!;
         private ProductService _service = null!;
+        private readonly DateTime _now = new(2025, 5, 10, 14, 30, 0);
 
         public ProductServiceCharacterizationTests()
         {
@@ -23,7 +25,9 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 .Options;
             _context = new AppDbContext(options);
             _notifications = new Mock<INotificationService>();
-            _service = new ProductService(_notifications.Object, _context);
+            _dateTimeProvider = new Mock<IDateTimeProvider>();
+            _dateTimeProvider.SetupGet(provider => provider.Now).Returns(_now);
+            _service = new ProductService(_notifications.Object, _context, _dateTimeProvider.Object);
         }
 
 
@@ -46,8 +50,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 20,
                 Available = 8,
                 Name = "Watermelon",
-                SeasonStartDate = DateTime.Now.AddDays(-1),
-                SeasonEndDate = DateTime.Now.AddDays(10)
+                SeasonStartDate = _now.AddDays(-1),
+                SeasonEndDate = _now.AddDays(10)
             });
 
             _service.HandleSeasonalProduct(product);
@@ -65,8 +69,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 2,
                 Available = 8,
                 Name = "Grapes",
-                SeasonStartDate = DateTime.Now.AddDays(30),
-                SeasonEndDate = DateTime.Now.AddDays(60)
+                SeasonStartDate = _now.AddDays(30),
+                SeasonEndDate = _now.AddDays(60)
             });
 
             _service.HandleSeasonalProduct(product);
@@ -84,8 +88,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 2,
                 Available = 8,
                 Name = "Peaches",
-                SeasonStartDate = DateTime.Now.AddDays(-1),
-                SeasonEndDate = DateTime.Now.AddDays(10)
+                SeasonStartDate = _now.AddDays(-1),
+                SeasonEndDate = _now.AddDays(10)
             });
 
             _service.HandleSeasonalProduct(product);
@@ -103,8 +107,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 1,
                 Available = 8,
                 Name = "Peaches",
-                SeasonStartDate = DateTime.Today.AddDays(-1),
-                SeasonEndDate = DateTime.Today.AddDays(1)
+                SeasonStartDate = _now.Date.AddDays(-1),
+                SeasonEndDate = _now.Date.AddDays(1).AddHours(23).AddMinutes(59)
             });
 
             _service.HandleSeasonalProduct(product);
@@ -124,8 +128,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = leadTime,
                 Available = 8,
                 Name = "Peaches",
-                SeasonStartDate = DateTime.Now.AddDays(-1),
-                SeasonEndDate = DateTime.Now.AddDays(10)
+                SeasonStartDate = _now.AddDays(-1),
+                SeasonEndDate = _now.AddDays(10)
             });
 
             _service.HandleSeasonalProduct(product);
@@ -140,7 +144,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 Available = 3,
                 Name = "Butter",
-                ExpiryDate = DateTime.Now.AddDays(2)
+                ExpiryDate = _now.AddDays(2)
             });
 
             _service.HandleExpiredProduct(product);
@@ -156,19 +160,36 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             {
                 Available = 3,
                 Name = "Milk",
-                ExpiryDate = DateTime.Today
+                ExpiryDate = _now.Date
             });
 
             _service.HandleExpiredProduct(product);
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
-            _notifications.Verify(service => service.SendExpirationNotification("Milk", DateTime.Today), Times.Once);
+            _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
+        }
+
+        [Fact]
+        public void ProductWithExpiryLaterTodayIsStillExpired()
+        {
+            DateTime expiryDate = _now.Date.AddHours(23).AddMinutes(59);
+            Product product = AddProduct(new Product
+            {
+                Available = 3,
+                Name = "Milk",
+                ExpiryDate = expiryDate
+            });
+
+            _service.HandleExpiredProduct(product);
+
+            Assert.Equal(0, ReadProduct(product.Id).Available);
+            _notifications.Verify(service => service.SendExpirationNotification("Milk", expiryDate), Times.Once);
         }
 
         [Fact]
         public void OutOfStockProductIsReportedExpiredEvenWhenItsExpiryDateIsInTheFuture()
         {
-            DateTime expiryDate = DateTime.Now.AddDays(2);
+            DateTime expiryDate = _now.AddDays(2);
             Product product = AddProduct(new Product
             {
                 Available = 0,
@@ -260,8 +281,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 0,
                 Type = "SEASONAL",
                 Name = "Watermelon",
-                SeasonStartDate = DateTime.Today,
-                SeasonEndDate = DateTime.Today.AddDays(10)
+                SeasonStartDate = _now.Date,
+                SeasonEndDate = _now.Date.AddDays(10)
             };
             Order order = AddOrder(product);
 
@@ -280,8 +301,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 0,
                 Type = "SEASONAL",
                 Name = "Watermelon",
-                SeasonStartDate = DateTime.Today.AddDays(-10),
-                SeasonEndDate = DateTime.Today
+                SeasonStartDate = _now.Date.AddDays(-10),
+                SeasonEndDate = _now.Date
             };
             Order order = AddOrder(product);
 
@@ -299,14 +320,14 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 Available = 2,
                 Type = "EXPIRABLE",
                 Name = "Milk",
-                ExpiryDate = DateTime.Today
+                ExpiryDate = _now.Date
             };
             Order order = AddOrder(product);
 
             _ = CreateController().ProcessOrder(order.Id);
 
             Assert.Equal(0, ReadProduct(product.Id).Available);
-            _notifications.Verify(service => service.SendExpirationNotification("Milk", DateTime.Today), Times.Once);
+            _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
         }
 
         [Fact]
@@ -317,8 +338,8 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 Available = 2,
                 Type = "SEASONAL",
                 Name = "Watermelon",
-                SeasonStartDate = DateTime.Today.AddDays(-1),
-                SeasonEndDate = DateTime.Today.AddDays(1)
+                SeasonStartDate = _now.Date.AddDays(-1),
+                SeasonEndDate = _now.Date.AddDays(1)
             };
             Product futureSeason = new()
             {
@@ -326,22 +347,22 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
                 LeadTime = 90,
                 Type = "SEASONAL",
                 Name = "Grapes",
-                SeasonStartDate = DateTime.Now.AddDays(30),
-                SeasonEndDate = DateTime.Now.AddDays(60)
+                SeasonStartDate = _now.AddDays(30),
+                SeasonEndDate = _now.AddDays(60)
             };
             Product unexpired = new()
             {
                 Available = 2,
                 Type = "EXPIRABLE",
                 Name = "Butter",
-                ExpiryDate = DateTime.Now.AddDays(2)
+                ExpiryDate = _now.AddDays(2)
             };
             Product expired = new()
             {
                 Available = 2,
                 Type = "EXPIRABLE",
                 Name = "Milk",
-                ExpiryDate = DateTime.Today.AddDays(-1)
+                ExpiryDate = _now.Date.AddDays(-1)
             };
             Order order = AddOrder(inSeason, futureSeason, unexpired, expired);
 
@@ -405,7 +426,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
         private OrdersController CreateController()
         {
-            return new OrdersController(_service, _context);
+            return new OrdersController(_service, _context, _dateTimeProvider.Object);
         }
     }
 }
