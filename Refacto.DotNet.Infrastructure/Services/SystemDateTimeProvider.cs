@@ -1,6 +1,6 @@
-using Refacto.DotNet.Controllers.Services;
+using Refacto.DotNet.Application.Contracts;
 
-namespace Refacto.DotNet.Controllers.Services.Impl
+namespace Refacto.DotNet.Infrastructure.Services
 {
     public sealed class SystemDateTimeProvider : IDateTimeProvider
     {

@@ -1,4 +1,4 @@
-namespace Refacto.DotNet.Controllers.Services
+namespace Refacto.DotNet.Domain.Products
 {
     public static class ProductTypeParser
     {

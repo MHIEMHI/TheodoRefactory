@@ -5,10 +5,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using System.Net;
 using System.Net.Http.Json;
-using Refacto.DotNet.Controllers.Database.Context;
+using Refacto.DotNet.Application.Contracts;
 using Refacto.DotNet.Controllers.Dtos.Product;
-using Refacto.DotNet.Controllers.Entities;
-using Refacto.DotNet.Controllers.Services;
+using Refacto.DotNet.Domain.Entities;
+using Refacto.DotNet.Infrastructure.Persistence;
 
 namespace Refacto.Dotnet.Controllers.Tests.Controllers
 {

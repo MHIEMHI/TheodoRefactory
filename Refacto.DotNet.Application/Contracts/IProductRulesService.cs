@@ -1,6 +1,6 @@
-using Refacto.DotNet.Controllers.Entities;
+using Refacto.DotNet.Domain.Entities;
 
-namespace Refacto.DotNet.Controllers.Services
+namespace Refacto.DotNet.Application.Contracts
 {
     public interface IProductRulesService
     {

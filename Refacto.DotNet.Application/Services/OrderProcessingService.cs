@@ -1,42 +1,39 @@
-using Microsoft.EntityFrameworkCore;
-using Refacto.DotNet.Controllers.Database.Context;
-using Refacto.DotNet.Controllers.Services;
+using Refacto.DotNet.Application.Contracts;
+using Refacto.DotNet.Domain.Entities;
 
-namespace Refacto.DotNet.Controllers.Services.Impl
+namespace Refacto.DotNet.Application.Services
 {
     public sealed class OrderProcessingService : IOrderProcessingService
     {
-        private readonly AppDbContext _context;
+        private readonly IOrderRepository _orders;
         private readonly IProductRulesService _productRules;
         private readonly IDateTimeProvider _dateTimeProvider;
 
         public OrderProcessingService(
-            AppDbContext context,
+            IOrderRepository orders,
             IProductRulesService productRules,
             IDateTimeProvider dateTimeProvider)
         {
-            _context = context;
+            _orders = orders;
             _productRules = productRules;
             _dateTimeProvider = dateTimeProvider;
         }
 
         public long? ProcessOrder(long orderId)
         {
-            Entities.Order? order = _context.Orders
-                .Include(candidate => candidate.Items)
-                .SingleOrDefault(candidate => candidate.Id == orderId);
-
+            Order? order = _orders.GetWithProducts(orderId);
             if (order is null)
             {
                 return null;
             }
 
             DateOnly currentDate = DateOnly.FromDateTime(_dateTimeProvider.Now);
-            foreach (Entities.Product product in order.Items ?? new List<Entities.Product>())
+            foreach (Product product in order.Items ?? new List<Product>())
             {
                 _productRules.ProcessProduct(product, currentDate);
             }
 
+            _orders.SaveChanges();
             return order.Id;
         }
     }

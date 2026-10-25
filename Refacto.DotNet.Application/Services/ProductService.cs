@@ -1,18 +1,16 @@
-using Refacto.DotNet.Controllers.Database.Context;
-using Refacto.DotNet.Controllers.Entities;
-using Refacto.DotNet.Controllers.Services;
+using Refacto.DotNet.Application.Contracts;
+using Refacto.DotNet.Domain.Entities;
+using Refacto.DotNet.Domain.Products;
 
-namespace Refacto.DotNet.Controllers.Services.Impl
+namespace Refacto.DotNet.Application.Services
 {
     public sealed class ProductService : IProductRulesService
     {
         private readonly INotificationService _notifications;
-        private readonly AppDbContext _context;
 
-        public ProductService(INotificationService notifications, AppDbContext context)
+        public ProductService(INotificationService notifications)
         {
             _notifications = notifications;
-            _context = context;
         }
 
         public void ProcessProduct(Product product, DateOnly currentDate)
@@ -41,11 +39,10 @@ namespace Refacto.DotNet.Controllers.Services.Impl
             if (product.Available > 0)
             {
                 product.Available -= 1;
-                _ = _context.SaveChanges();
             }
             else if (product.LeadTime > 0)
             {
-                NotifyDelay(product.LeadTime, product);
+                _notifications.SendDelayNotification(product.LeadTime, product.Name);
             }
         }
 
@@ -61,23 +58,20 @@ namespace Refacto.DotNet.Controllers.Services.Impl
                 && product.Available > 0)
             {
                 product.Available -= 1;
-                _ = _context.SaveChanges();
             }
             else if (seasonEndDate.HasValue
                 && currentDate.AddDays(product.LeadTime) >= seasonEndDate.Value)
             {
                 _notifications.SendOutOfStockNotification(product.Name);
                 product.Available = 0;
-                _ = _context.SaveChanges();
             }
             else if (seasonStartDate.HasValue && seasonStartDate.Value > currentDate)
             {
                 _notifications.SendOutOfStockNotification(product.Name);
-                _ = _context.SaveChanges();
             }
             else
             {
-                NotifyDelay(product.LeadTime, product);
+                _notifications.SendDelayNotification(product.LeadTime, product.Name);
             }
         }
 
@@ -87,21 +81,17 @@ namespace Refacto.DotNet.Controllers.Services.Impl
             if (product.Available > 0 && expiryDate.HasValue && expiryDate.Value > currentDate)
             {
                 product.Available -= 1;
-                _ = _context.SaveChanges();
             }
             else
             {
-                _notifications.SendExpirationNotification(product.Name, product.ExpiryDate!.Value);
-                product.Available = 0;
-                _ = _context.SaveChanges();
-            }
-        }
+                if (!product.ExpiryDate.HasValue)
+                {
+                    throw new InvalidOperationException("An expirable product must have an expiry date.");
+                }
 
-        private void NotifyDelay(int leadTime, Product product)
-        {
-            product.LeadTime = leadTime;
-            _ = _context.SaveChanges();
-            _notifications.SendDelayNotification(leadTime, product.Name);
+                _notifications.SendExpirationNotification(product.Name, product.ExpiryDate.Value);
+                product.Available = 0;
+            }
         }
 
         private static DateOnly? ToDateOnly(DateTime? value)

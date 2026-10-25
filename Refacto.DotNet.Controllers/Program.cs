@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
-using Refacto.DotNet.Controllers.Database.Context;
-using Refacto.DotNet.Controllers.Services;
+using Refacto.DotNet.Infrastructure;
+using Refacto.DotNet.Application.Contracts;
+using Refacto.DotNet.Application.Services;
 using Refacto.DotNet.Controllers.Services.Impl;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -14,11 +14,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IOrderProcessingService, OrderProcessingService>();
 builder.Services.AddScoped<IProductRulesService, ProductService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    _ = options.UseInMemoryDatabase($"InMemoryDb");
-});
+_ = builder.Services.AddInfrastructure();
 
 WebApplication app = builder.Build();
 

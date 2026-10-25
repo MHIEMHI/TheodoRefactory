@@ -1,11 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Refacto.DotNet.Application.Contracts;
+using Refacto.DotNet.Application.Services;
 using Refacto.DotNet.Controllers.Controllers;
-using Refacto.DotNet.Controllers.Database.Context;
-using Refacto.DotNet.Controllers.Entities;
-using Refacto.DotNet.Controllers.Services;
-using Refacto.DotNet.Controllers.Services.Impl;
+using Refacto.DotNet.Domain.Entities;
+using Refacto.DotNet.Domain.Products;
+using Refacto.DotNet.Infrastructure.Persistence;
 
 namespace Refacto.Dotnet.Controllers.Tests.Services
 {
@@ -27,7 +28,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             _notifications = new Mock<INotificationService>();
             _dateTimeProvider = new Mock<IDateTimeProvider>();
             _dateTimeProvider.SetupGet(provider => provider.Now).Returns(_now);
-            _service = new ProductService(_notifications.Object, _context);
+            _service = new ProductService(_notifications.Object);
         }
 
 
@@ -38,7 +39,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(15, ReadProduct(product.Id).LeadTime);
+            Assert.Equal(15, product.LeadTime);
             _notifications.Verify(service => service.SendDelayNotification(15, "RJ45 Cable"), Times.Once);
         }
 
@@ -76,7 +77,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(0, ReadProduct(product.Id).Available);
+            Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Watermelon"), Times.Once);
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
         }
@@ -96,7 +97,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(8, ReadProduct(product.Id).Available);
+            Assert.Equal(8, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Grapes"), Times.Once);
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
         }
@@ -116,7 +117,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(8, ReadProduct(product.Id).Available);
+            Assert.Equal(8, product.Available);
             _notifications.Verify(service => service.SendDelayNotification(2, "Peaches"), Times.Once);
             _notifications.Verify(service => service.SendOutOfStockNotification(It.IsAny<string>()), Times.Never);
         }
@@ -136,7 +137,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(0, ReadProduct(product.Id).Available);
+            Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendOutOfStockNotification("Peaches"), Times.Once);
             _notifications.Verify(service => service.SendDelayNotification(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
         }
@@ -174,7 +175,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(2, ReadProduct(product.Id).Available);
+            Assert.Equal(2, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
         }
 
@@ -191,7 +192,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(0, ReadProduct(product.Id).Available);
+            Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", _now.Date), Times.Once);
         }
 
@@ -209,7 +210,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(0, ReadProduct(product.Id).Available);
+            Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Milk", expiryDate), Times.Once);
         }
 
@@ -227,7 +228,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             _service.ProcessProduct(product, DateOnly.FromDateTime(_now));
 
-            Assert.Equal(0, ReadProduct(product.Id).Available);
+            Assert.Equal(0, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification("Cheese", expiryDate), Times.Once);
         }
 
@@ -248,7 +249,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
 
             Assert.Throws<InvalidOperationException>(() => _service.ProcessProduct(product, DateOnly.FromDateTime(_now)));
 
-            Assert.Equal(2, ReadProduct(product.Id).Available);
+            Assert.Equal(2, product.Available);
             _notifications.Verify(service => service.SendExpirationNotification(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
         }
 
@@ -455,7 +456,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         private OrdersController CreateController()
         {
             IOrderProcessingService orderProcessingService =
-                new OrderProcessingService(_context, _service, _dateTimeProvider.Object);
+                new OrderProcessingService(new EfOrderRepository(_context), _service, _dateTimeProvider.Object);
             return new OrdersController(orderProcessingService);
         }
     }
