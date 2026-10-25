@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Refacto.DotNet.Application.Contracts;
 using Refacto.DotNet.Application.Services;
+using Refacto.DotNet.Application.Services.ProductHandlers;
 using Refacto.DotNet.Controllers.Controllers;
 using Refacto.DotNet.Domain.Entities;
 using Refacto.DotNet.Domain.Products;
@@ -28,7 +29,7 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             _notifications = new Mock<INotificationService>();
             _dateTimeProvider = new Mock<IDateTimeProvider>();
             _dateTimeProvider.SetupGet(provider => provider.Now).Returns(_now);
-            _service = new ProductService(_notifications.Object);
+            _service = CreateProductService();
         }
 
 
@@ -60,6 +61,32 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
         public void ProductTypeParserRejectsUnsupportedValues(string? value)
         {
             Assert.False(ProductTypeParser.TryParse(value, out _));
+        }
+
+        [Fact]
+        public void ProductServiceDelegatesToHandlerForParsedType()
+        {
+            Mock<IProductTypeHandler> handler = new();
+            _ = handler.SetupGet(candidate => candidate.ProductType).Returns(ProductType.Normal);
+            ProductService service = new(new[] { handler.Object });
+            Product product = new() { Type = "NORMAL", Name = "USB Cable" };
+            DateOnly currentDate = DateOnly.FromDateTime(_now);
+
+            service.ProcessProduct(product, currentDate);
+
+            handler.Verify(candidate => candidate.Handle(product, currentDate), Times.Once);
+        }
+
+        [Fact]
+        public void ProductServiceRejectsDuplicateHandlersForSameType()
+        {
+            Mock<IProductTypeHandler> firstHandler = new();
+            Mock<IProductTypeHandler> secondHandler = new();
+            _ = firstHandler.SetupGet(handler => handler.ProductType).Returns(ProductType.Normal);
+            _ = secondHandler.SetupGet(handler => handler.ProductType).Returns(ProductType.Normal);
+
+            Assert.Throws<ArgumentException>(() =>
+                new ProductService(new[] { firstHandler.Object, secondHandler.Object }));
         }
 
         [Fact]
@@ -458,6 +485,16 @@ namespace Refacto.Dotnet.Controllers.Tests.Services
             IOrderProcessingService orderProcessingService =
                 new OrderProcessingService(new EfOrderRepository(_context), _service, _dateTimeProvider.Object);
             return new OrdersController(orderProcessingService);
+        }
+
+        private ProductService CreateProductService()
+        {
+            return new ProductService(new IProductTypeHandler[]
+            {
+                new NormalProductHandler(_notifications.Object),
+                new SeasonalProductHandler(_notifications.Object),
+                new ExpirableProductHandler(_notifications.Object)
+            });
         }
     }
 }

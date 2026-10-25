@@ -1,6 +1,5 @@
 using Refacto.DotNet.Infrastructure;
-using Refacto.DotNet.Application.Contracts;
-using Refacto.DotNet.Application.Services;
+using Refacto.DotNet.Application;
 using Refacto.DotNet.Controllers.Services.Impl;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -11,9 +10,8 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddScoped<IOrderProcessingService, OrderProcessingService>();
-builder.Services.AddScoped<IProductRulesService, ProductService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+_ = builder.Services.AddApplication();
 _ = builder.Services.AddInfrastructure();
 
 WebApplication app = builder.Build();

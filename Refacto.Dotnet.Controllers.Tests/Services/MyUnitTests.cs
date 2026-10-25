@@ -1,6 +1,7 @@
 using Moq;
 using Refacto.DotNet.Application.Contracts;
 using Refacto.DotNet.Application.Services;
+using Refacto.DotNet.Application.Services.ProductHandlers;
 using Refacto.DotNet.Domain.Entities;
 
 namespace Refacto.DotNet.Controllers.Tests.Services
@@ -13,7 +14,12 @@ namespace Refacto.DotNet.Controllers.Tests.Services
         public MyUnitTests()
         {
             _mockNotificationService = new Mock<INotificationService>();
-            _productService = new ProductService(_mockNotificationService.Object);
+            _productService = new ProductService(new IProductTypeHandler[]
+            {
+                new NormalProductHandler(_mockNotificationService.Object),
+                new SeasonalProductHandler(_mockNotificationService.Object),
+                new ExpirableProductHandler(_mockNotificationService.Object)
+            });
         }
 
         [Fact]
